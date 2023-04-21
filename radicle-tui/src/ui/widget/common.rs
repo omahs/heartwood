@@ -3,9 +3,8 @@ use tuirealm::props::{AttrValue, Attribute, PropPayload, PropValue, TextSpan};
 use tuirealm::MockComponent;
 
 use crate::ui;
-use crate::ui::components::common::container::Header;
 
-use ui::components::common::container::{GlobalListener, LabeledContainer, Tabs};
+use ui::components::common::container::{GlobalListener, Header, LabeledContainer, Tabs};
 use ui::components::common::context::{Shortcut, Shortcuts};
 use ui::components::common::label::Label;
 use ui::components::common::list::{List, Property, PropertyList, Table};
