@@ -81,7 +81,8 @@ impl ViewPage for Home {
 
     fn view(&mut self, app: &mut Application<Cid, Message, NoUserEvent>, frame: &mut Frame) {
         let area = frame.size();
-        let layout = layout::default_page(area);
+        let navigation_h = 1u16;
+        let layout = layout::default_page(area, navigation_h);
 
         app.view(&Cid::Home(HomeCid::Navigation), frame, layout[0]);
         app.view(&self.active_component, frame, layout[1]);
