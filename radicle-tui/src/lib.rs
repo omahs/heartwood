@@ -29,7 +29,11 @@ where
     fn update(&mut self, app: &mut Application<Id, Message, NoUserEvent>) -> Result<bool>;
 
     /// Should draw the application to a frame.
-    fn view(&mut self, app: &mut Application<Id, Message, NoUserEvent>, frame: &mut Frame);
+    fn view(
+        &mut self,
+        app: &mut Application<Id, Message, NoUserEvent>,
+        frame: &mut Frame,
+    ) -> Result<()>;
 
     /// Should return true if the application is requested to quit.
     fn quit(&self) -> bool;
@@ -81,7 +85,9 @@ impl Window {
         while !tui.quit() {
             if update {
                 self.terminal.raw_mut().draw(|frame| {
-                    tui.view(&mut app, frame);
+                    if let Err(err) = tui.view(&mut app, frame) {
+                        println!("{}", err);
+                    }
                 })?;
             }
             update = tui.update(&mut app)?;
