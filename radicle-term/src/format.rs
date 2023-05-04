@@ -1,3 +1,5 @@
+pub mod diff;
+
 use crate::Paint;
 
 pub fn default<D: std::fmt::Display>(msg: D) -> Paint<D> {

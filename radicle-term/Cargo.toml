@@ -10,6 +10,9 @@ anyhow = { version = "1" }
 concolor = { version = "0", features = ["api_unstable"] }
 inquire = { version = "0.6", default-features = false, features = ["termion", "editor"] }
 once_cell = { version = "1.13" }
+radicle-surf = { version = "0.9.0" }
+serde = { version = "1.0" }
+serde_json = { version = "1" }
 termion = { version = "2" }
 unicode-width = { version = "0.1.10", default-features = false }
 unicode-segmentation = { version = "1.7.1" }
