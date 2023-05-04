@@ -1,5 +1,3 @@
-use std::process;
-
 use radicle::cob::patch;
 use radicle::git;
 use radicle::storage::git::Repository;
@@ -10,21 +8,38 @@ use radicle_term::{
 
 use crate::terminal as term;
 
-use super::common::*;
 use super::*;
 
-fn show_patch_diff(patch: &patch::Patch, storage: &Repository) -> anyhow::Result<()> {
-    let target_head = patch_merge_target_oid(patch.target(), storage)?;
-    let base_oid = storage.raw().merge_base(target_head, **patch.head())?;
-    let diff = format!("{}..{}", base_oid, patch.head());
+fn show_patch_diff(patch: &patch::Patch, workdir: &git::raw::Repository) -> anyhow::Result<()> {
+    let (_, revision) = patch.latest().unwrap();
+    let repo = radicle_surf::Repository::open(workdir.path())?;
+    let base = repo.commit(revision.base())?;
+    let head = repo.commit(revision.head())?;
+    let diff = repo.diff(base.id, head.id)?;
+    let mut files = diff.files().peekable();
 
-    process::Command::new("git")
-        .current_dir(storage.path())
-        .args(["log", "--patch", &diff])
-        .stdout(process::Stdio::inherit())
-        .stderr(process::Stdio::inherit())
-        .spawn()?
-        .wait()?;
+    let mut table = Table::<3, term::Line>::new(TableOptions {
+        spacing: 2,
+        border: Some(term::colors::FAINT),
+        ..TableOptions::default()
+    });
+
+    while let Some(file) = files.next() {
+        let header = term::format::diff::file_header(file)?;
+        table.push(header);
+        table.divider();
+
+        let rows = term::format::diff::file_rows(file)?;
+        for row in rows {
+            table.push(row);
+        }
+
+        if let Some(_) = files.peek() {
+            table.divider();
+        }
+    }
+
+    table.print();
 
     Ok(())
 }
@@ -111,7 +126,7 @@ pub fn run(
 
     if diff {
         term::blank();
-        show_patch_diff(&patch, stored)?;
+        show_patch_diff(&patch, workdir)?;
         term::blank();
     }
     Ok(())

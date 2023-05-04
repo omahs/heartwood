@@ -1913,6 +1913,7 @@ dependencies = [
  "radicle-cob",
  "radicle-crypto",
  "radicle-node",
+ "radicle-surf",
  "radicle-term",
  "serde",
  "serde_json",
