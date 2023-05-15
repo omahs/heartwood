@@ -4,6 +4,7 @@ use std::time::Duration;
 use anyhow::Result;
 
 use tuirealm::terminal::TerminalBridge;
+use tuirealm::tui::layout::Rect;
 use tuirealm::Frame;
 use tuirealm::{Application, EventListenerCfg, NoUserEvent};
 
@@ -73,6 +74,7 @@ impl Window {
         Message: Eq,
     {
         let mut update = true;
+        let mut size = self.terminal_size()?;
         let mut app = Application::init(
             EventListenerCfg::default().default_input_listener(Duration::from_millis(interval)),
         );
@@ -84,9 +86,14 @@ impl Window {
                     .raw_mut()
                     .draw(|frame| tui.view(&mut app, frame))?;
             }
-            update = tui.update(&mut app)?;
+            update = tui.update(&mut app)? || size != self.terminal_size()?;
+            size = self.terminal_size()?;
         }
 
         Ok(())
+    }
+
+    fn terminal_size(&self) -> Result<Rect, std::io::Error> {
+        self.terminal.raw().size()
     }
 }

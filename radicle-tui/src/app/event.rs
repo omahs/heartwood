@@ -21,7 +21,6 @@ use super::{HomeMessage, Message, PatchMessage};
 impl tuirealm::Component<Message, NoUserEvent> for Widget<GlobalListener> {
     fn on(&mut self, event: Event<NoUserEvent>) -> Option<Message> {
         match event {
-            Event::WindowResize(_, _) => Some(Message::Tick),
             Event::Keyboard(KeyEvent {
                 code: Key::Char('q'),
                 ..
