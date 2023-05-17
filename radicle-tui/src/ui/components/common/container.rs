@@ -1,17 +1,19 @@
 use tuirealm::command::{Cmd, CmdResult};
 use tuirealm::props::{
-    AttrValue, Attribute, BorderSides, BorderType, Color, PropPayload, PropValue, Props, Style,
-    TextModifiers,
+    AttrValue, Attribute, BorderSides, BorderType, Color, Props, Style, TextModifiers,
 };
 use tuirealm::tui::layout::{Constraint, Direction, Layout, Rect};
-use tuirealm::tui::widgets::{Block, Cell, Row};
+use tuirealm::tui::widgets::Block;
 use tuirealm::{Frame, MockComponent, State, StateValue};
 
 use crate::ui::components::common::label::Label;
 use crate::ui::ext::HeaderBlock;
 use crate::ui::layout;
 use crate::ui::state::TabState;
+use crate::ui::theme::Theme;
 use crate::ui::widget::{Widget, WidgetComponent};
+
+use super::list::{Table, TableItem, TableModel};
 
 /// Some user events need to be handled globally (e.g. user presses key `q` to quit
 /// the application). This component can be used in conjunction with SubEventClause
@@ -126,47 +128,39 @@ impl WidgetComponent for Tabs {
 }
 
 /// A labeled container header.
-#[derive(Default)]
-pub struct Header;
+pub struct Header<K, V>
+where
+    K: ToString,
+    V: TableItem,
+{
+    model: TableModel<K, V>,
+    theme: Theme,
+    spacing: u16,
+}
 
-impl Header {
-    fn content<'a>(spans: Vec<PropValue>) -> Row<'a> {
-        Row::new(
-            spans
-                .iter()
-                .map(|span| Cell::from(span.clone().unwrap_text_span().content))
-                .collect::<Vec<_>>(),
-        )
-    }
-
-    fn widths(widths: Vec<PropValue>) -> Vec<Constraint> {
-        widths
-            .iter()
-            .map(|prop| Constraint::Percentage(prop.clone().unwrap_u16()))
-            .collect()
+impl<K, V> Header<K, V>
+where
+    K: ToString,
+    V: TableItem,
+{
+    pub fn new(model: TableModel<K, V>, theme: Theme, spacing: u16) -> Self {
+        Self {
+            model,
+            theme,
+            spacing,
+        }
     }
 }
 
-impl WidgetComponent for Header {
+impl<K, V> WidgetComponent for Header<K, V>
+where
+    K: ToString + Clone,
+    V: TableItem + Clone,
+{
     fn view(&mut self, properties: &Props, frame: &mut Frame, area: Rect) {
         let display = properties
             .get_or(Attribute::Display, AttrValue::Flag(true))
             .unwrap_flag();
-        let content = properties
-            .get_or(
-                Attribute::Content,
-                AttrValue::Payload(PropPayload::Vec(vec![])),
-            )
-            .unwrap_payload()
-            .unwrap_vec();
-        let widths = properties
-            .get_or(
-                Attribute::Custom("widths"),
-                AttrValue::Payload(PropPayload::Vec(vec![])),
-            )
-            .unwrap_payload()
-            .unwrap_vec();
-
         if display {
             let block = HeaderBlock::default()
                 .borders(BorderSides::all())
@@ -181,12 +175,10 @@ impl WidgetComponent for Header {
                 .horizontal_margin(1)
                 .split(area);
 
-            let header = Self::content(content);
-            let widths = Self::widths(widths);
-
+            let widths = Table::<K, V>::widths(area, self.model.widths(), self.spacing);
             let table = tuirealm::tui::widgets::Table::new(vec![])
-                .column_spacing(3u16)
-                .header(header)
+                .column_spacing(self.spacing)
+                .header(self.model.header(&self.theme))
                 .widths(&widths);
             frame.render_widget(table, layout[0]);
         }
@@ -202,12 +194,12 @@ impl WidgetComponent for Header {
 }
 
 pub struct LabeledContainer {
-    header: Widget<Header>,
+    header: Widget<Header<String, ()>>,
     component: Box<dyn MockComponent>,
 }
 
 impl LabeledContainer {
-    pub fn new(header: Widget<Header>, component: Box<dyn MockComponent>) -> Self {
+    pub fn new(header: Widget<Header<String, ()>>, component: Box<dyn MockComponent>) -> Self {
         Self { header, component }
     }
 }
