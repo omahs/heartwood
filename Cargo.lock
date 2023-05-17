@@ -2169,6 +2169,7 @@ dependencies = [
  "lexopt",
  "radicle",
  "radicle-cli",
+ "radicle-surf",
  "radicle-term",
  "timeago 0.4.1",
  "tui-realm-stdlib",
