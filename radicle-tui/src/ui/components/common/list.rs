@@ -1,9 +1,5 @@
-use radicle::Profile;
 use tuirealm::command::{Cmd, CmdResult};
-use tuirealm::props::{
-    AttrValue, Attribute, BorderSides, BorderType, Color, PropPayload, PropValue, Props, Style,
-    TextSpan,
-};
+use tuirealm::props::{AttrValue, Attribute, BorderSides, BorderType, Color, Props, Style};
 use tuirealm::tui::layout::{Constraint, Direction, Layout, Rect};
 use tuirealm::tui::widgets::{Block, Cell, Row, TableState};
 use tuirealm::{Frame, MockComponent, State, StateValue};
@@ -15,8 +11,99 @@ use crate::ui::widget::{Widget, WidgetComponent};
 
 use super::container::Header;
 
-pub trait List {
-    fn row(&self, theme: &Theme, profile: &Profile) -> Vec<TextSpan>;
+/// A generic item that can be displayed in a table.
+pub trait TableItem {
+    /// Get table row applying a given [`theme`].
+    fn row<'a>(&self, theme: &Theme) -> Row<'a>;
+}
+
+/// Grow behavior of a table column.
+///
+/// [`tui::widgets::Table`] does only support percental column widths.
+/// A [`ColumnWidth`] is used to specify the grow behaviour of a table column
+/// and a percental column width is calculated based on that.
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum ColumnWidth {
+    /// A fixed-size column.
+    Fixed(u16),
+    /// A growable column.
+    Grow,
+}
+
+/// A generic key-value table model.
+///
+/// [`K`] needs to implement `ToString` since its string representation
+/// is passed to the app's message handler via [`CmdResult`].
+/// [`V`] needs to implement `TableItem` in order to be displayed by the
+/// table this model is used in.
+#[derive(Clone)]
+pub struct TableModel<K, V>
+where
+    K: ToString,
+    V: TableItem,
+{
+    /// The table header.
+    header: Vec<Widget<Label>>,
+    /// Items hold by this model.
+    items: Vec<(K, V)>,
+    /// Grow behavior of table columns.
+    widths: Vec<ColumnWidth>,
+}
+
+impl<K, V> Default for TableModel<K, V>
+where
+    K: ToString,
+    V: TableItem,
+{
+    fn default() -> Self {
+        Self {
+            header: vec![],
+            items: vec![],
+            widths: vec![],
+        }
+    }
+}
+
+impl<K, V> TableModel<K, V>
+where
+    K: ToString,
+    V: TableItem,
+{
+    /// Adds a new column to this model.
+    pub fn with_column(mut self, label: Widget<Label>, width: ColumnWidth) -> Self {
+        self.header.push(label);
+        self.widths.push(width);
+        self
+    }
+
+    /// Pushes a new row to this model.
+    pub fn push_item(&mut self, item: (K, V)) {
+        self.items.push(item);
+    }
+
+    /// Get all column widhts defined by this model.
+    pub fn widths(&self) -> &Vec<ColumnWidth> {
+        &self.widths
+    }
+
+    // Get the item count.
+    pub fn count(&self) -> u16 {
+        self.items.len() as u16
+    }
+
+    /// Get this model's table header.
+    pub fn header<'a>(&self, theme: &Theme) -> Row<'a> {
+        let cells = self.header.iter().map(|label| {
+            let cell: Cell = label.into();
+            cell.style(Style::default().fg(theme.colors.default_fg))
+        });
+        Row::new(cells).height(1)
+    }
+
+    /// Get this model's table rows.
+    pub fn rows<'a>(&self, theme: &Theme) -> Vec<Row<'a>> {
+        self.items.iter().map(|(_, item)| item.row(theme)).collect()
+    }
 }
 
 /// A component that displays a labeled property.
@@ -107,16 +194,32 @@ impl WidgetComponent for PropertyList {
     }
 }
 
-pub struct Table {
-    header: Widget<Header>,
+/// A table component that can display a list of [`TableItem`]s hold by a [`TableModel`].
+pub struct Table<K, V>
+where
+    K: ToString + Clone,
+    V: TableItem + Clone,
+{
+    model: TableModel<K, V>,
     state: TableState,
+    theme: Theme,
+    spacing: u16,
 }
 
-impl Table {
-    pub fn new(header: Widget<Header>) -> Self {
+impl<K, V> Table<K, V>
+where
+    K: ToString + Clone,
+    V: TableItem + Clone,
+{
+    pub fn new(model: TableModel<K, V>, theme: Theme, spacing: u16) -> Self {
         let mut state = TableState::default();
         state.select(Some(0));
-        Self { header, state }
+        Self {
+            model,
+            state,
+            theme,
+            spacing,
+        }
     }
 
     fn select_previous(&mut self) {
@@ -137,52 +240,64 @@ impl Table {
         self.state.select(Some(index));
     }
 
-    fn rows<'a>(spans: Vec<Vec<TextSpan>>) -> Vec<Row<'a>> {
-        spans
+    /// Calculates `Constraint::Percentage` for each fixed column width in `widths`,
+    /// taking into account the available width in `area` and the column spacing given by `spacing`.
+    pub fn widths(area: Rect, widths: &[ColumnWidth], spacing: u16) -> Vec<Constraint> {
+        let total_spacing = spacing.saturating_mul(widths.len() as u16);
+        let fixed_width = widths
             .iter()
-            .map(|spans| {
-                let cells = spans.iter().map(|span| {
-                    let style = Style::default().fg(span.fg);
-                    Cell::from(span.content.clone()).style(style)
-                });
-                Row::new(cells).height(1)
+            .fold(0u16, |total, &width| match width {
+                ColumnWidth::Fixed(w) => total + w,
+                ColumnWidth::Grow => total,
             })
-            .collect::<Vec<Row>>()
-    }
+            .saturating_add(total_spacing);
 
-    fn widths(widths: Vec<PropValue>) -> Vec<Constraint> {
+        let grow_count = widths.iter().fold(0u16, |count, &w| {
+            if w == ColumnWidth::Grow {
+                count + 1
+            } else {
+                count
+            }
+        });
+        let grow_width = area
+            .width
+            .saturating_sub(fixed_width)
+            .checked_div(grow_count)
+            .unwrap_or(0);
+
         widths
             .iter()
-            .map(|prop| Constraint::Percentage(prop.clone().unwrap_u16()))
+            .map(|width| match width {
+                ColumnWidth::Fixed(w) => {
+                    let p: f64 = *w as f64 / area.width as f64 * 100_f64;
+                    Constraint::Percentage(p.ceil() as u16)
+                }
+                ColumnWidth::Grow => {
+                    let p: f64 = grow_width as f64 / area.width as f64 * 100_f64;
+                    Constraint::Percentage(p.floor() as u16)
+                }
+            })
             .collect()
     }
 }
 
-impl WidgetComponent for Table {
+impl<K, V> WidgetComponent for Table<K, V>
+where
+    K: ToString + Clone,
+    V: TableItem + Clone,
+{
     fn view(&mut self, properties: &Props, frame: &mut Frame, area: Rect) {
-        let content = properties
-            .get_or(Attribute::Content, AttrValue::Table(vec![]))
-            .unwrap_table();
         let highlight = properties
             .get_or(Attribute::HighlightedColor, AttrValue::Color(Color::Reset))
             .unwrap_color();
-        let widths = properties
-            .get_or(
-                Attribute::Custom("widths"),
-                AttrValue::Payload(PropPayload::Vec(vec![])),
-            )
-            .unwrap_payload()
-            .unwrap_vec();
 
         let layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints(vec![Constraint::Length(3), Constraint::Min(1)])
             .split(area);
 
-        let rows = Self::rows(content);
-        let widths = Self::widths(widths);
-
-        let rows = tuirealm::tui::widgets::Table::new(rows)
+        let widths = Self::widths(area, self.model.widths(), self.spacing);
+        let table = tuirealm::tui::widgets::Table::new(self.model.rows(&self.theme))
             .block(
                 Block::default()
                     .borders(BorderSides::BOTTOM | BorderSides::LEFT | BorderSides::RIGHT)
@@ -190,46 +305,45 @@ impl WidgetComponent for Table {
                     .border_type(BorderType::Rounded),
             )
             .highlight_style(Style::default().bg(highlight))
-            .column_spacing(3u16)
+            .column_spacing(self.spacing)
             .widths(&widths);
 
-        self.header.view(frame, layout[0]);
-        frame.render_stateful_widget(rows, layout[1], &mut self.state);
+        let mut header = Widget::new(Header::new(
+            self.model.clone(),
+            self.theme.clone(),
+            self.spacing,
+        ));
+        header.view(frame, layout[0]);
+        frame.render_stateful_widget(table, layout[1], &mut self.state);
     }
 
     fn state(&self) -> State {
         State::None
     }
 
-    fn perform(&mut self, properties: &Props, cmd: Cmd) -> CmdResult {
+    fn perform(&mut self, _properties: &Props, cmd: Cmd) -> CmdResult {
         use tuirealm::command::Direction;
 
-        let content = properties
-            .get_or(Attribute::Content, AttrValue::Table(vec![]))
-            .unwrap_table();
-
+        let len = self.model.count() as usize;
         match cmd {
             Cmd::Move(Direction::Up) => {
                 self.select_previous();
-                if let Some(selected) = self.state.selected() {
-                    CmdResult::Changed(State::One(StateValue::Usize(selected)))
-                } else {
-                    CmdResult::None
-                }
+                CmdResult::None
             }
             Cmd::Move(Direction::Down) => {
-                self.select_next(content.len());
-                if let Some(selected) = self.state.selected() {
-                    CmdResult::Changed(State::One(StateValue::Usize(selected)))
-                } else {
-                    CmdResult::None
-                }
+                self.select_next(len);
+                CmdResult::None
             }
             Cmd::Submit => {
-                if let Some(selected) = self.state.selected() {
-                    CmdResult::Submit(State::One(StateValue::Usize(selected)))
-                } else {
-                    CmdResult::None
+                let item = self
+                    .state
+                    .selected()
+                    .and_then(|selected| self.model.items.get(selected));
+                match item {
+                    Some((id, _)) => {
+                        CmdResult::Submit(State::One(StateValue::String(id.to_string())))
+                    }
+                    None => CmdResult::None,
                 }
             }
             _ => CmdResult::None,
