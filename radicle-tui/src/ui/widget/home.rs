@@ -1,10 +1,9 @@
-use radicle::cob::patch::{Patch, PatchId};
 use radicle::identity::{Id, Project};
 use radicle::Profile;
 
+use crate::ui::components;
 use crate::ui::components::common::container::Tabs;
-use crate::ui::components::common::Browser;
-use crate::ui::components::home::{Dashboard, IssueBrowser};
+use crate::ui::components::home::{Dashboard, IssueBrowser, PatchBrowser};
 use crate::ui::theme::Theme;
 
 use super::{common, Widget};
@@ -13,9 +12,9 @@ pub fn navigation(theme: &Theme) -> Widget<Tabs> {
     common::tabs(
         theme,
         vec![
-            common::reversable_label("dashboard").foreground(theme.colors.tabs_highlighted_fg),
-            common::reversable_label("issues").foreground(theme.colors.tabs_highlighted_fg),
-            common::reversable_label("patches").foreground(theme.colors.tabs_highlighted_fg),
+            components::reversable_label("dashboard").foreground(theme.colors.tabs_highlighted_fg),
+            components::reversable_label("issues").foreground(theme.colors.tabs_highlighted_fg),
+            components::reversable_label("patches").foreground(theme.colors.tabs_highlighted_fg),
         ],
     )
 }
@@ -46,11 +45,7 @@ pub fn dashboard(theme: &Theme, id: &Id, project: &Project) -> Widget<Dashboard>
     Widget::new(dashboard)
 }
 
-pub fn patches(
-    theme: &Theme,
-    items: &[(PatchId, Patch)],
-    profile: &Profile,
-) -> Widget<Browser<(PatchId, Patch)>> {
+pub fn patches(theme: &Theme, id: &Id, profile: &Profile) -> Widget<PatchBrowser> {
     let shortcuts = common::shortcuts(
         theme,
         vec![
@@ -61,13 +56,7 @@ pub fn patches(
         ],
     );
 
-    let labels = vec!["", "title", "author", "time", "comments", "tags"];
-    let widths = vec![3u16, 42, 15, 10, 5, 25];
-
-    let table = common::table(theme, &labels, &widths, items, profile);
-    let browser: Browser<(PatchId, Patch)> = Browser::new(table, shortcuts);
-
-    Widget::new(browser)
+    Widget::new(PatchBrowser::new(theme, profile, id, shortcuts))
 }
 
 pub fn issues(theme: &Theme) -> Widget<IssueBrowser> {
@@ -79,7 +68,7 @@ pub fn issues(theme: &Theme) -> Widget<IssueBrowser> {
         ],
     );
 
-    let not_implemented = common::label("not implemented").foreground(theme.colors.default_fg);
+    let not_implemented = components::label("not implemented").foreground(theme.colors.default_fg);
     let browser = IssueBrowser::new(not_implemented, shortcuts);
 
     Widget::new(browser)

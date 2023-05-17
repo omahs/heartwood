@@ -6,7 +6,8 @@ use radicle::cob::patch::{Patch, PatchId};
 use super::common;
 use super::Widget;
 
-use crate::ui::cob::patch;
+use crate::ui::cob;
+use crate::ui::components;
 use crate::ui::components::common::container::Tabs;
 use crate::ui::components::common::context::ContextBar;
 use crate::ui::components::patch::Activity;
@@ -16,8 +17,8 @@ pub fn navigation(theme: &Theme) -> Widget<Tabs> {
     common::tabs(
         theme,
         vec![
-            common::reversable_label("activity").foreground(theme.colors.tabs_highlighted_fg),
-            common::reversable_label("files").foreground(theme.colors.tabs_highlighted_fg),
+            components::reversable_label("activity").foreground(theme.colors.tabs_highlighted_fg),
+            components::reversable_label("files").foreground(theme.colors.tabs_highlighted_fg),
         ],
     )
 }
@@ -34,7 +35,7 @@ pub fn activity(theme: &Theme, patch: (PatchId, &Patch), profile: &Profile) -> W
     );
     let context = context(theme, (id, patch), profile);
 
-    let not_implemented = common::label("not implemented").foreground(theme.colors.default_fg);
+    let not_implemented = components::label("not implemented").foreground(theme.colors.default_fg);
     let activity = Activity::new(not_implemented, context, shortcuts);
 
     Widget::new(activity)
@@ -52,7 +53,7 @@ pub fn files(theme: &Theme, patch: (PatchId, &Patch), profile: &Profile) -> Widg
     );
     let context = context(theme, (id, patch), profile);
 
-    let not_implemented = common::label("not implemented").foreground(theme.colors.default_fg);
+    let not_implemented = components::label("not implemented").foreground(theme.colors.default_fg);
     let files = Activity::new(not_implemented, context, shortcuts);
 
     Widget::new(files)
@@ -60,22 +61,25 @@ pub fn files(theme: &Theme, patch: (PatchId, &Patch), profile: &Profile) -> Widg
 
 pub fn context(theme: &Theme, patch: (PatchId, &Patch), profile: &Profile) -> Widget<ContextBar> {
     let (id, patch) = patch;
-    let id = patch::format_id(id);
-    let title = patch.title();
-    let author = patch::format_author(patch, profile);
-    let comments = patch::format_comments(patch);
+    let (_, rev) = patch.latest().unwrap();
+    let is_you = *patch.author().id() == profile.did();
 
-    let context = common::label(" patch ").background(theme.colors.context_badge_bg);
-    let id = common::label(&format!(" {id} "))
+    let id = cob::format_id(&id);
+    let title = patch.title();
+    let author = cob::format_author(patch.author().id(), is_you);
+    let comments = rev.discussion().len();
+
+    let context = components::label(" patch ").background(theme.colors.context_badge_bg);
+    let id = components::label(&format!(" {id} "))
         .foreground(theme.colors.context_id_fg)
         .background(theme.colors.context_id_bg);
-    let title = common::label(&format!(" {title} "))
+    let title = components::label(&format!(" {title} "))
         .foreground(theme.colors.default_fg)
         .background(theme.colors.context_bg);
-    let author = common::label(&format!(" {author} "))
+    let author = components::label(&format!(" {author} "))
         .foreground(theme.colors.context_id_author_fg)
         .background(theme.colors.context_bg);
-    let comments = common::label(&format!(" {comments} "))
+    let comments = components::label(&format!(" {comments} "))
         .foreground(Color::Rgb(70, 70, 70))
         .background(theme.colors.context_light_bg);
 
