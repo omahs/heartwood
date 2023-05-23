@@ -406,9 +406,9 @@ impl<V> List<V>
 where
     V: ListItem + Clone,
 {
-    pub fn new(model: ListModel<V>, theme: Theme, spacing: u16) -> Self {
+    pub fn new(model: ListModel<V>, theme: Theme, selection: usize, spacing: u16) -> Self {
         let mut state = ListState::default();
-        state.select(Some(0));
+        state.select(Some(selection));
         Self {
             model,
             state,

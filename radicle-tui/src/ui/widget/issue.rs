@@ -14,11 +14,12 @@ use crate::ui::theme::Theme;
 
 pub fn list(
     theme: &Theme,
-    _issue: (IssueId, &Issue),
+    issue: (IssueId, &Issue),
     profile: &Profile,
     id: &Id,
 ) -> Widget<LargeList> {
-    let list = LargeList::new(theme, profile, id);
+    let (issue_id, _) = issue;
+    let list = LargeList::new(theme, profile, id, issue_id);
     Widget::new(list)
 }
 
