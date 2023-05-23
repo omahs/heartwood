@@ -9,10 +9,10 @@ use super::Widget;
 use crate::ui::cob;
 use crate::ui::components;
 use crate::ui::components::common::context::ContextBar;
-use crate::ui::components::patch::Activity;
+use crate::ui::components::issue::Preview;
 use crate::ui::theme::Theme;
 
-pub fn list(theme: &Theme, issue: (IssueId, &Issue), profile: &Profile) -> Widget<Activity> {
+pub fn preview(theme: &Theme, issue: (IssueId, &Issue), profile: &Profile) -> Widget<Preview> {
     let (id, issue) = issue;
     let shortcuts = common::shortcuts(
         theme,
@@ -24,7 +24,7 @@ pub fn list(theme: &Theme, issue: (IssueId, &Issue), profile: &Profile) -> Widge
     let context = context(theme, (id, issue), profile);
 
     let not_implemented = components::label("not implemented").foreground(theme.colors.default_fg);
-    let activity = Activity::new(not_implemented, context, shortcuts);
+    let activity = Preview::new(not_implemented, context, shortcuts);
 
     Widget::new(activity)
 }

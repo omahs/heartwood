@@ -127,7 +127,7 @@ pub struct IssuePage {
 impl IssuePage {
     pub fn new(issue: (IssueId, Issue)) -> Self {
         IssuePage {
-            active_component: Cid::Issue(IssueCid::List),
+            active_component: Cid::Issue(IssueCid::Preview),
             issue,
         }
     }
@@ -141,16 +141,16 @@ impl ViewPage for IssuePage {
         theme: &Theme,
     ) -> Result<()> {
         let (id, issue) = &self.issue;
-        let list = widget::issue::list(theme, (*id, issue), &context.profile).to_boxed();
+        let list = widget::issue::preview(theme, (*id, issue), &context.profile).to_boxed();
 
-        app.remount(Cid::Issue(IssueCid::List), list, vec![])?;
+        app.remount(Cid::Issue(IssueCid::Preview), list, vec![])?;
         app.active(&self.active_component)?;
 
         Ok(())
     }
 
     fn unmount(&self, app: &mut Application<Cid, Message, NoUserEvent>) -> Result<()> {
-        app.umount(&Cid::Issue(IssueCid::List))?;
+        app.umount(&Cid::Issue(IssueCid::Preview))?;
         Ok(())
     }
 
@@ -168,7 +168,6 @@ impl ViewPage for IssuePage {
         let area = frame.size();
         let layout = layout::default_page(area);
 
-        app.view(&Cid::Patch(PatchCid::Navigation), frame, layout[0]);
         app.view(&self.active_component, frame, layout[1]);
     }
 }

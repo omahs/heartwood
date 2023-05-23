@@ -6,7 +6,7 @@ use radicle_tui::ui::components::common::container::{GlobalListener, LabeledCont
 use radicle_tui::ui::components::common::context::{ContextBar, Shortcuts};
 use radicle_tui::ui::components::common::list::PropertyList;
 use radicle_tui::ui::components::home::{Dashboard, IssueBrowser, PatchBrowser};
-use radicle_tui::ui::components::patch;
+use radicle_tui::ui::components::{patch, issue};
 
 use radicle_tui::ui::widget::Widget;
 
@@ -38,6 +38,17 @@ impl tuirealm::Component<Message, NoUserEvent> for Widget<Tabs> {
                     }
                     _ => None,
                 }
+            }
+            _ => None,
+        }
+    }
+}
+
+impl tuirealm::Component<Message, NoUserEvent> for Widget<issue::Preview> {
+    fn on(&mut self, event: Event<NoUserEvent>) -> Option<Message> {
+        match event {
+            Event::Keyboard(KeyEvent { code: Key::Esc, .. }) => {
+                Some(Message::Issue(IssueMessage::Leave))
             }
             _ => None,
         }
