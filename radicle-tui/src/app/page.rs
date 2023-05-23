@@ -13,7 +13,7 @@ use radicle_tui::ui::layout;
 use radicle_tui::ui::theme::Theme;
 use radicle_tui::ui::widget;
 
-use super::{subscription, Application, Cid, Context, HomeCid, IssueCid, Message, PatchCid};
+use super::{Application, Cid, Context, HomeCid, IssueCid, Message, PatchCid};
 
 /// `tuirealm`'s event and prop system is designed to work with flat component hierarchies.
 /// Building deep nested component hierarchies would need a lot more additional effort to
@@ -48,7 +48,7 @@ pub trait ViewPage {
     /// Will be called whenever this view page is pushed to the stack, or it is on top of the stack again
     /// after another view page was popped from the stack.
     fn subscribe(&self, app: &mut Application<Cid, Message, NoUserEvent>) -> Result<()>;
-    
+
     /// Will be called whenever this view page is on top of the stack and another view page is pushed
     /// to the stack, or if this is popped from the stack.
     fn unsubscribe(&self, app: &mut Application<Cid, Message, NoUserEvent>) -> Result<()>;
@@ -161,7 +161,7 @@ pub struct IssuePage {
 impl IssuePage {
     pub fn new(issue: (IssueId, Issue)) -> Self {
         IssuePage {
-            active_component: Cid::Issue(IssueCid::Preview),
+            active_component: Cid::Issue(IssueCid::List),
             issue,
         }
     }
@@ -175,16 +175,28 @@ impl ViewPage for IssuePage {
         theme: &Theme,
     ) -> Result<()> {
         let (id, issue) = &self.issue;
-        let list = widget::issue::preview(theme, (*id, issue), &context.profile).to_boxed();
+        let list =
+            widget::issue::list(theme, (*id, issue), &context.profile, &context.id).to_boxed();
+        let shortcuts = widget::common::shortcuts(
+            theme,
+            vec![
+                widget::common::shortcut(theme, "esc", "back"),
+                widget::common::shortcut(theme, "q", "quit"),
+            ],
+        )
+        .to_boxed();
 
-        app.remount(Cid::Issue(IssueCid::Preview), list, vec![])?;
+        app.remount(Cid::Issue(IssueCid::List), list, vec![])?;
+        app.remount(Cid::Issue(IssueCid::Shortcuts), shortcuts, vec![])?;
+
         app.active(&self.active_component)?;
 
         Ok(())
     }
 
     fn unmount(&self, app: &mut Application<Cid, Message, NoUserEvent>) -> Result<()> {
-        app.umount(&Cid::Issue(IssueCid::Preview))?;
+        app.umount(&Cid::Issue(IssueCid::List))?;
+        app.umount(&Cid::Issue(IssueCid::Shortcuts))?;
         Ok(())
     }
 
@@ -200,9 +212,19 @@ impl ViewPage for IssuePage {
 
     fn view(&mut self, app: &mut Application<Cid, Message, NoUserEvent>, frame: &mut Frame) {
         let area = frame.size();
-        let layout = layout::default_page(area);
+        let shortcuts_h = 1u16;
+        let layout = layout::issue_preview(area, shortcuts_h);
 
-        app.view(&self.active_component, frame, layout[1]);
+        app.view(&Cid::Issue(IssueCid::List), frame, layout.left);
+        app.view(&Cid::Issue(IssueCid::Shortcuts), frame, layout.shortcuts);
+    }
+
+    fn subscribe(&self, _app: &mut Application<Cid, Message, NoUserEvent>) -> Result<()> {
+        Ok(())
+    }
+
+    fn unsubscribe(&self, _app: &mut Application<Cid, Message, NoUserEvent>) -> Result<()> {
+        Ok(())
     }
 }
 

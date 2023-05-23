@@ -1,32 +1,25 @@
 use radicle::cob::issue::Issue;
 use radicle::cob::issue::IssueId;
+use radicle::prelude::Id;
 use radicle::Profile;
 use tuirealm::props::Color;
 
-use super::common;
 use super::Widget;
 
 use crate::ui::cob;
 use crate::ui::components;
 use crate::ui::components::common::context::ContextBar;
-use crate::ui::components::issue::Preview;
+use crate::ui::components::issue::LargeList;
 use crate::ui::theme::Theme;
 
-pub fn preview(theme: &Theme, issue: (IssueId, &Issue), profile: &Profile) -> Widget<Preview> {
-    let (id, issue) = issue;
-    let shortcuts = common::shortcuts(
-        theme,
-        vec![
-            common::shortcut(theme, "esc", "back"),
-            common::shortcut(theme, "q", "quit"),
-        ],
-    );
-    let context = context(theme, (id, issue), profile);
-
-    let not_implemented = components::label("not implemented").foreground(theme.colors.default_fg);
-    let activity = Preview::new(not_implemented, context, shortcuts);
-
-    Widget::new(activity)
+pub fn list(
+    theme: &Theme,
+    _issue: (IssueId, &Issue),
+    profile: &Profile,
+    id: &Id,
+) -> Widget<LargeList> {
+    let list = LargeList::new(theme, profile, id);
+    Widget::new(list)
 }
 
 pub fn context(theme: &Theme, issue: (IssueId, &Issue), profile: &Profile) -> Widget<ContextBar> {

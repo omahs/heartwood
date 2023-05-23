@@ -1,64 +1,61 @@
+use radicle::prelude::Id;
+use radicle::Profile;
+
+use radicle::storage::ReadStorage;
+
+use radicle::cob::issue::Issues;
+
 use tuirealm::command::{Cmd, CmdResult};
 use tuirealm::props::Props;
 use tuirealm::tui::layout::Rect;
-use tuirealm::{AttrValue, Attribute, Frame, MockComponent, State};
+use tuirealm::{Frame, MockComponent, State};
 
-use crate::ui::layout;
+use crate::ui::cob::IssueItem;
+use crate::ui::theme::Theme;
 use crate::ui::widget::{Widget, WidgetComponent};
 
-use super::common::context::{ContextBar, Shortcuts};
-use super::common::label::Label;
+use super::common::list::{List, ListModel};
 
-pub struct Preview {
-    label: Widget<Label>,
-    context: Widget<ContextBar>,
-    shortcuts: Widget<Shortcuts>,
+use super::*;
+
+pub struct LargeList {
+    list: Widget<List<IssueItem>>,
 }
 
-impl Preview {
-    pub fn new(
-        label: Widget<Label>,
-        context: Widget<ContextBar>,
-        shortcuts: Widget<Shortcuts>,
-    ) -> Self {
-        Self {
-            label,
-            context,
-            shortcuts,
+impl LargeList {
+    pub fn new(theme: &Theme, profile: &Profile, id: &Id) -> Self {
+        let repo = profile.storage.repository(*id).unwrap();
+        let issues = Issues::open(&repo).unwrap();
+        let mut model = ListModel::new(label(" Issues "));
+
+        if let Ok(all) = issues.all() {
+            let mut issues = all.flatten().collect::<Vec<_>>();
+            issues.sort_by(|(_, a, _), (_, b, _)| b.timestamp().cmp(&a.timestamp()));
+            issues.sort_by(|(_, a, _), (_, b, _)| a.state().cmp(b.state()));
+
+            for (id, issue, _) in issues {
+                if let Ok(item) = IssueItem::try_from((profile, &repo, id, issue)) {
+                    model.push_item(item);
+                }
+            }
         }
+
+        let list = Widget::new(List::new(model, theme.clone(), 2))
+            .highlight(theme.colors.item_list_highlighted_bg);
+        Self { list }
     }
 }
 
-impl WidgetComponent for Preview {
+impl WidgetComponent for LargeList {
     fn view(&mut self, _properties: &Props, frame: &mut Frame, area: Rect) {
-        let label_w = self
-            .label
-            .query(Attribute::Width)
-            .unwrap_or(AttrValue::Size(1))
-            .unwrap_size();
-        let context_h = self
-            .context
-            .query(Attribute::Height)
-            .unwrap_or(AttrValue::Size(0))
-            .unwrap_size();
-        let shortcuts_h = self
-            .shortcuts
-            .query(Attribute::Height)
-            .unwrap_or(AttrValue::Size(0))
-            .unwrap_size();
-        let layout = layout::root_component_with_context(area, context_h, shortcuts_h);
-
-        self.label
-            .view(frame, layout::centered_label(label_w, layout[0]));
-        self.context.view(frame, layout[1]);
-        self.shortcuts.view(frame, layout[2]);
+        self.list.view(frame, area);
     }
 
     fn state(&self) -> State {
         State::None
     }
 
-    fn perform(&mut self, _properties: &Props, _cmd: Cmd) -> CmdResult {
-        CmdResult::None
+    fn perform(&mut self, _properties: &Props, cmd: Cmd) -> CmdResult {
+        self.list.perform(cmd)
     }
 }

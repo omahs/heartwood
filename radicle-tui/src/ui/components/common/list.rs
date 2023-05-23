@@ -1,7 +1,7 @@
 use tuirealm::command::{Cmd, CmdResult};
 use tuirealm::props::{AttrValue, Attribute, BorderSides, BorderType, Color, Props, Style};
 use tuirealm::tui::layout::{Constraint, Direction, Layout, Rect};
-use tuirealm::tui::widgets::{Block, Cell, Row, TableState};
+use tuirealm::tui::widgets::{Block, Cell, ListState, Row, TableState};
 use tuirealm::{Frame, MockComponent, State};
 
 use crate::ui::components::common::label::Label;
@@ -22,7 +22,7 @@ pub trait TableItem<const W: usize> {
 /// [`tui::widgets::Table`] does only support percental column widths.
 /// A [`ColumnWidth`] is used to specify the grow behaviour of a table column
 /// and a percental column width is calculated based on that.
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ColumnWidth {
     /// A fixed-size column.
     Fixed(u16),
@@ -89,6 +89,59 @@ where
 
     /// Get this model's table rows.
     pub fn rows(&self, theme: &Theme) -> Vec<[Cell; W]> {
+        self.items.iter().map(|item| item.row(theme)).collect()
+    }
+}
+
+/// A generic item that can be displayed in a list.
+pub trait ListItem {
+    /// Should return fields as list item.
+    fn row(&self, theme: &Theme) -> tuirealm::tui::widgets::ListItem;
+}
+
+/// A generic list model.
+///
+/// [`V`] needs to implement `ListItem` in order to be displayed by the
+/// list this model is used in.
+#[derive(Clone)]
+pub struct ListModel<V>
+where
+    V: ListItem,
+{
+    /// The table header.
+    header: Widget<Label>,
+    /// Items hold by this model.
+    items: Vec<V>,
+}
+
+impl<V> ListModel<V>
+where
+    V: ListItem,
+{
+    pub fn new(header: Widget<Label>) -> Self {
+        Self {
+            header,
+            items: vec![],
+        }
+    }
+
+    /// Pushes a new row to this model.
+    pub fn push_item(&mut self, item: V) {
+        self.items.push(item);
+    }
+
+    // Get the item count.
+    pub fn count(&self) -> u16 {
+        self.items.len() as u16
+    }
+
+    /// Get this model's table header.
+    pub fn header(&self, _theme: &Theme) -> Widget<Label> {
+        self.header.clone()
+    }
+
+    /// Get this model's table rows.
+    pub fn rows(&self, theme: &Theme) -> Vec<tuirealm::tui::widgets::ListItem> {
         self.items.iter().map(|item| item.row(theme)).collect()
     }
 }
@@ -294,6 +347,11 @@ where
             .map(|cells| Row::new(cells.clone()))
             .collect();
 
+        let mut header = Widget::new(Header::new(
+            self.model.clone(),
+            self.theme.clone(),
+            self.spacing,
+        ));
         let table = tuirealm::tui::widgets::Table::new(rows)
             .block(
                 Block::default()
@@ -305,11 +363,6 @@ where
             .column_spacing(self.spacing)
             .widths(&widths);
 
-        let mut header = Widget::new(Header::new(
-            self.model.clone(),
-            self.theme.clone(),
-            self.spacing,
-        ));
         header.view(frame, layout[0]);
         frame.render_stateful_widget(table, layout[1], &mut self.state);
     }
@@ -331,18 +384,123 @@ where
                 self.select_next(len);
                 CmdResult::None
             }
-            // Cmd::Submit => {
-            //     let item = self
-            //         .state
-            //         .selected()
-            //         .and_then(|selected| self.model.items.get(selected));
-            //     match item {
-            //         Some(item) => {
-            //             CmdResult::Submit(State::One(StateValue::String(id.to_string())))
-            //         }
-            //         None => CmdResult::None,
-            //     }
-            // }
+            _ => CmdResult::None,
+        }
+    }
+}
+
+////////////////////////////////////////////////
+
+/// A table component that can display a list of [`TableItem`]s hold by a [`TableModel`].
+pub struct List<V>
+where
+    V: ListItem + Clone,
+{
+    model: ListModel<V>,
+    state: ListState,
+    theme: Theme,
+    spacing: u16,
+}
+
+impl<V> List<V>
+where
+    V: ListItem + Clone,
+{
+    pub fn new(model: ListModel<V>, theme: Theme, spacing: u16) -> Self {
+        let mut state = ListState::default();
+        state.select(Some(0));
+        Self {
+            model,
+            state,
+            theme,
+            spacing,
+        }
+    }
+
+    fn select_previous(&mut self) {
+        let index = match self.state.selected() {
+            Some(selected) if selected == 0 => 0,
+            Some(selected) => selected.saturating_sub(1),
+            None => 0,
+        };
+        self.state.select(Some(index));
+    }
+
+    fn select_next(&mut self, len: usize) {
+        let index = match self.state.selected() {
+            Some(selected) if selected >= len.saturating_sub(1) => len.saturating_sub(1),
+            Some(selected) => selected.saturating_add(1),
+            None => 0,
+        };
+        self.state.select(Some(index));
+    }
+
+    pub fn selection(&self) -> Option<&V> {
+        self.state
+            .selected()
+            .and_then(|selected| self.model.items.get(selected))
+    }
+}
+
+impl<V> WidgetComponent for List<V>
+where
+    V: ListItem + Clone,
+{
+    fn view(&mut self, properties: &Props, frame: &mut Frame, area: Rect) {
+        let highlight = properties
+            .get_or(Attribute::HighlightedColor, AttrValue::Color(Color::Reset))
+            .unwrap_color();
+
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(vec![Constraint::Length(3), Constraint::Min(1)])
+            .split(area);
+
+        let mut header = Widget::new(Header::new(
+            TableModel::<(), 1>::new([self.model.header.clone()], [ColumnWidth::Grow]),
+            self.theme.clone(),
+            self.spacing,
+        ));
+        header.view(frame, layout[0]);
+
+        let rows = self.model.rows(&self.theme);
+        let list =
+            tuirealm::tui::widgets::List::new(rows).highlight_style(Style::default().bg(highlight));
+
+        let block = Block::default()
+            .borders(BorderSides::BOTTOM | BorderSides::LEFT | BorderSides::RIGHT)
+            .border_style(Style::default().fg(Color::Rgb(48, 48, 48)))
+            .border_type(BorderType::Rounded);
+        frame.render_widget(block, layout[1]);
+
+        let mut inner_area = layout[1];
+        inner_area.height -= 1;
+
+        let inner = Layout::default()
+            .horizontal_margin(self.spacing)
+            .direction(Direction::Horizontal)
+            .constraints(vec![Constraint::Percentage(100)])
+            .split(inner_area);
+        frame.render_stateful_widget(list, inner[0], &mut self.state);
+    }
+
+    fn state(&self) -> State {
+        State::None
+    }
+
+    fn perform(&mut self, _properties: &Props, cmd: Cmd) -> CmdResult {
+        use tuirealm::command::Direction;
+
+        let len = self.model.count() as usize;
+        match cmd {
+            Cmd::Move(Direction::Up) => {
+                self.select_previous();
+                CmdResult::None
+            }
+            Cmd::Move(Direction::Down) => {
+                self.select_next(len);
+                CmdResult::None
+            }
             _ => CmdResult::None,
         }
     }

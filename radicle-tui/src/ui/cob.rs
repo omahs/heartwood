@@ -13,10 +13,14 @@ use radicle::Profile;
 use radicle::cob::patch::{Patch, PatchId, State as PatchState};
 
 use tuirealm::props::{Color, Style};
+use tuirealm::tui::style::Modifier;
+use tuirealm::tui::text::{Span, Spans};
 use tuirealm::tui::widgets::Cell;
 
 use crate::ui::components::common::list::TableItem;
 use crate::ui::theme::Theme;
+
+use super::components::common::list::ListItem;
 
 /// An author item that can be used in tables, list or trees.
 ///
@@ -201,6 +205,36 @@ impl TableItem<7> for IssueItem {
             .style(Style::default().fg(theme.colors.browser_list_timestamp));
 
         [state, id, title, author, tags, assignees, opened]
+    }
+}
+
+impl ListItem for IssueItem {
+    fn row(&self, theme: &Theme) -> tuirealm::tui::widgets::ListItem {
+        let (state, state_color) = format_issue_state(&self.state);
+        let lines = vec![
+            Spans::from(vec![
+                Span::styled(state, Style::default().fg(state_color)),
+                Span::styled(
+                    self.title.clone(),
+                    Style::default().fg(theme.colors.browser_list_title),
+                ),
+            ]),
+            Spans::from(vec![
+                Span::raw(String::from("   ")),
+                Span::styled(
+                    format_author(&self.author.did, self.author.is_you),
+                    Style::default().fg(theme.colors.browser_list_author),
+                ),
+                Span::raw(String::from(" ")),
+                Span::styled(
+                    format_timestamp(&self.timestamp),
+                    Style::default()
+                        .fg(theme.colors.browser_list_timestamp)
+                        .add_modifier(Modifier::ITALIC),
+                ),
+            ]),
+        ];
+        tuirealm::tui::widgets::ListItem::new(lines)
     }
 }
 

@@ -38,7 +38,8 @@ pub enum PatchCid {
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub enum IssueCid {
-    Preview,
+    List,
+    Shortcuts,
 }
 
 /// All component ids known to this application.
