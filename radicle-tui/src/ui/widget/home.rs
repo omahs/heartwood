@@ -59,17 +59,16 @@ pub fn patches(theme: &Theme, id: &Id, profile: &Profile) -> Widget<PatchBrowser
     Widget::new(PatchBrowser::new(theme, profile, id, shortcuts))
 }
 
-pub fn issues(theme: &Theme) -> Widget<IssueBrowser> {
+pub fn issues(theme: &Theme, id: &Id, profile: &Profile) -> Widget<IssueBrowser> {
     let shortcuts = common::shortcuts(
         theme,
         vec![
             common::shortcut(theme, "tab", "section"),
+            common::shortcut(theme, "↑/↓", "navigate"),
+            common::shortcut(theme, "enter", "show"),
             common::shortcut(theme, "q", "quit"),
         ],
     );
 
-    let not_implemented = components::label("not implemented").foreground(theme.colors.default_fg);
-    let browser = IssueBrowser::new(not_implemented, shortcuts);
-
-    Widget::new(browser)
+    Widget::new(IssueBrowser::new(theme, profile, id, shortcuts))
 }
