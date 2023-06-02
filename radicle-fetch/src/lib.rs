@@ -1,5 +1,6 @@
 pub mod gix;
 
+pub mod identity;
 pub mod refs;
 pub mod sigrefs;
 
