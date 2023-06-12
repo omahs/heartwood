@@ -5,7 +5,7 @@ use std::{
 
 use git_ext::ref_format::RefString;
 use gix_hash::ObjectId;
-use radicle_crypto::PublicKey;
+use radicle_crypto::{PublicKey, Signer};
 
 pub mod error {
     use radicle_crypto::PublicKey;
@@ -23,22 +23,16 @@ pub mod error {
 }
 
 pub trait Store {
-    type Error: std::error::Error + Send + Sync + 'static;
+    type LoadError: std::error::Error + Send + Sync + 'static;
+    type UpdateError: std::error::Error + Send + Sync + 'static;
 
     /// Load the signed refs of the `remote` peer.
-    fn load(&self, remote: &PublicKey) -> Result<Option<Sigrefs>, Self::Error>;
-
-    fn load_at(
-        &self,
-        treeish: ObjectId,
-        remote: &PublicKey,
-    ) -> Result<Option<Sigrefs>, Self::Error>;
+    fn load(&self, remote: &PublicKey) -> Result<Option<Sigrefs>, Self::LoadError>;
 
     /// Compute and update the sigrefs for the local peer.
-    ///
-    /// A `None` return value denotes that the sigrefs were already
-    /// up-to-date.
-    fn update(&self) -> Result<Option<ObjectId>, Self::Error>;
+    fn update<G>(&self, signer: &G) -> Result<(), Self::UpdateError>
+    where
+        G: Signer;
 }
 
 #[derive(Debug, Default)]
@@ -48,7 +42,7 @@ impl RemoteRefs {
     pub fn load<S>(
         store: &S,
         Select { must, may }: Select,
-    ) -> Result<Self, error::RemoteRefs<S::Error>>
+    ) -> Result<Self, error::RemoteRefs<S::LoadError>>
     where
         S: Store,
     {
