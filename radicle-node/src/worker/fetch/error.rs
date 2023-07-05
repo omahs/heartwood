@@ -5,6 +5,24 @@ use thiserror::Error;
 use radicle::{git, identity, storage, storage::refs};
 
 #[derive(Debug, Error)]
+pub enum Fetch {
+    #[error(transparent)]
+    Run(#[from] radicle::fetch::Error),
+
+    #[error(transparent)]
+    Git(#[from] git::raw::Error),
+}
+
+#[derive(Debug, Error)]
+pub enum Handle {
+    #[error(transparent)]
+    Identity(#[from] radicle::identity::IdentityError),
+
+    #[error(transparent)]
+    Storage(#[from] radicle::storage::Error),
+}
+
+#[derive(Debug, Error)]
 pub enum Init {
     #[error(transparent)]
     Io(#[from] io::Error),

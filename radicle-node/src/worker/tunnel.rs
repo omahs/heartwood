@@ -3,8 +3,12 @@ use std::{
     net, thread, time,
 };
 
+use radicle::fetch;
+use radicle::fetch::transport;
+use radicle::fetch::transport::ConnectionStream;
+
 use super::channels::Channels;
-use super::{Handle, NodeId, StreamId, Worker};
+use super::{Handle, NodeId, StreamId};
 
 /// Tunnels fetches to a remote peer.
 pub struct Tunnel<'a> {
@@ -82,7 +86,7 @@ impl<'a> Tunnel<'a> {
                             Err(e) => return Err(e),
                         }
                     }
-                    Worker::eof(nid, stream_id, remote_w, &mut self.handle)
+                    super::eof(nid, stream_id, remote_w, &mut self.handle)
                 })?;
 
             remote_to_local.join().unwrap()?;
@@ -90,5 +94,21 @@ impl<'a> Tunnel<'a> {
 
             Ok::<(), io::Error>(())
         })
+    }
+}
+
+impl<'a> ConnectionStream for &'a mut Tunnel<'a> {
+    type Read = <Channels as ConnectionStream>::Read;
+    type Write = <Channels as ConnectionStream>::Write;
+    type Error = <Channels as ConnectionStream>::Error;
+
+    fn open(&mut self) -> Result<(&mut Self::Read, &mut Self::Write), Self::Error> {
+        self.channels.open()
+    }
+}
+
+impl<'a> transport::Tunnel for &'a mut Tunnel<'a> {
+    fn url(&self) -> fetch::gix::BString {
+        self.local_addr().to_string().into()
     }
 }

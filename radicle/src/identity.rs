@@ -4,6 +4,7 @@ pub mod project;
 
 use std::collections::HashMap;
 
+use radicle_fetch as fetch;
 use radicle_git_ext::Oid;
 use thiserror::Error;
 
@@ -164,6 +165,13 @@ impl Identity<Untrusted> {
         })
     }
 }
+
+impl fetch::Verified for Identity<doc::Id> {
+    fn delegates(&self) -> nonempty::NonEmpty<PublicKey> {
+        self.doc.delegates.clone().map(|did| did.into())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use qcheck_macros::quickcheck;

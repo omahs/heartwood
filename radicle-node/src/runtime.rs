@@ -9,6 +9,7 @@ use std::{io, net, thread, time};
 use crossbeam_channel as chan;
 use cyphernet::Ecdh;
 use netservices::resource::NetAccept;
+use radicle::fetch::gix::refdb::UserInfo;
 use reactor::poller::popol;
 use reactor::Reactor;
 use thiserror::Error;
@@ -134,6 +135,8 @@ impl Runtime {
         let address_db = node_dir.join(ADDRESS_DB_FILE);
         let routing_db = node_dir.join(ROUTING_DB_FILE);
         let tracking_db = node_dir.join(TRACKING_DB_FILE);
+        let scope = config.scope;
+        let policy = config.policy;
 
         log::info!(target: "node", "Opening address book {}..", address_db.display());
         let addresses = address::Book::open(address_db)?;
@@ -142,10 +145,10 @@ impl Runtime {
         let routing = routing::Table::open(routing_db)?;
 
         log::info!(target: "node", "Opening tracking policy table {}..", tracking_db.display());
-        let tracking = tracking::Store::open(tracking_db)?;
-        let tracking = tracking::Config::new(config.policy, config.scope, tracking);
+        let tracking = tracking::Store::open(tracking_db.clone())?;
+        let tracking = tracking::Config::new(policy, scope, tracking);
 
-        log::info!(target: "node", "Default tracking policy set to '{}'", &config.policy);
+        log::info!(target: "node", "Default tracking policy set to '{}'", &policy);
         log::info!(target: "node", "Initializing service ({:?})..", network);
         let emitter: Emitter<Event> = Default::default();
         let service = service::Service::new(
@@ -161,7 +164,7 @@ impl Runtime {
         );
 
         let (worker_send, worker_recv) = chan::unbounded::<worker::Task>();
-        let mut wire = Wire::new(service, worker_send, signer, proxy, clock);
+        let mut wire = Wire::new(service, worker_send, signer.clone(), proxy, clock);
         let mut local_addrs = Vec::new();
 
         for addr in listen {
@@ -184,8 +187,19 @@ impl Runtime {
             );
         }
 
+        let fetch = worker::FetchConfig {
+            policy,
+            scope,
+            tracking_db,
+            limit: radicle::fetch::FetchLimit::default(),
+            info: UserInfo {
+                // TODO: get actual alias
+                alias: "anonymous".to_string(),
+                pk: *signer.public_key(),
+            },
+            signer,
+        };
         let pool = worker::Pool::with(
-            id,
             worker_recv,
             handle.clone(),
             worker::Config {
@@ -193,6 +207,7 @@ impl Runtime {
                 name: id.to_human(),
                 timeout: time::Duration::from_secs(9),
                 storage: storage.clone(),
+                fetch,
                 daemon,
                 atomic,
             },

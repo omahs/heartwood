@@ -235,6 +235,7 @@ fn test_replication_no_delegates() {
 
 #[test]
 fn test_replication_invalid() {
+    logger::init(log::Level::Trace);
     let tmp = tempfile::tempdir().unwrap();
     let alice = Node::init(tmp.path());
     let mut bob = Node::init(tmp.path());
@@ -272,6 +273,7 @@ fn test_replication_invalid() {
     alice.handle.track_repo(acme, Scope::Trusted).unwrap();
     let result = alice.handle.fetch(acme, bob.id).unwrap();
 
+    println!("{:#?}", result);
     // Fetch is successful despite not fetching Carol's refs, since she isn't a delegate.
     assert!(result.is_success());
 

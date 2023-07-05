@@ -112,7 +112,7 @@ impl Streams {
 
     /// Register an open stream.
     fn register(&mut self, stream: StreamId) -> Option<worker::Channels> {
-        let (wire, worker) = worker::Channels::pair(DEFAULT_CHANNEL_TIMEOUT)
+        let (wire, worker) = worker::Channels::pair(stream, DEFAULT_CHANNEL_TIMEOUT)
             .expect("Streams::register: fatal: unable to create channels");
 
         match self.streams.entry(stream) {

@@ -623,6 +623,7 @@ where
             Err(err) => {
                 let reason = err.to_string();
                 error!(target: "service", "Fetch failed for {rid} from {remote}: {reason}");
+                log::trace!(target: "service", "Fetch failed for {rid} from {remote}: {err:?}");
 
                 // For now, we only disconnect the remote in case of timeout. In the future,
                 // there may be other reasons to disconnect.

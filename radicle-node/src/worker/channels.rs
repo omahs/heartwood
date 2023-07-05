@@ -1,8 +1,45 @@
-use std::io::Read;
+use std::convert::Infallible;
+use std::io::{Read, Write};
 use std::ops::Deref;
 use std::{fmt, io, time};
 
 use crossbeam_channel as chan;
+use radicle::node::NodeId;
+
+use crate::runtime::Handle;
+use crate::wire::StreamId;
+
+pub struct Tunnel {
+    receiver: ChannelReader,
+    sender: ChannelFlushWriter,
+}
+
+impl Tunnel {
+    pub fn new(handle: Handle, channels: Channels, remote: NodeId) -> Self {
+        Self {
+            receiver: channels.receiver,
+            sender: ChannelFlushWriter {
+                writer: channels.sender,
+                handle,
+                remote,
+            },
+        }
+    }
+
+    pub fn split(&mut self) -> (&mut ChannelReader, &mut ChannelFlushWriter) {
+        (&mut self.receiver, &mut self.sender)
+    }
+}
+
+impl radicle::fetch::transport::ConnectionStream for Tunnel {
+    type Read = ChannelReader;
+    type Write = ChannelFlushWriter;
+    type Error = Infallible;
+
+    fn open(&mut self) -> Result<(&mut Self::Read, &mut Self::Write), Self::Error> {
+        Ok((&mut self.receiver, &mut self.sender))
+    }
+}
 
 /// Data that can be sent and received on worker channels.
 pub enum ChannelEvent<T = Vec<u8>> {
@@ -41,20 +78,28 @@ impl<T: AsRef<[u8]>> Channels<T> {
     pub fn new(
         sender: chan::Sender<ChannelEvent<T>>,
         receiver: chan::Receiver<ChannelEvent<T>>,
+        stream: StreamId,
         timeout: time::Duration,
     ) -> Self {
-        let sender = ChannelWriter { sender, timeout };
-        let receiver = ChannelReader::new(receiver, timeout);
+        let sender = ChannelWriter {
+            sender,
+            stream,
+            timeout,
+        };
+        let receiver = ChannelReader::new(receiver, stream, timeout);
 
         Self { sender, receiver }
     }
 
-    pub fn pair(timeout: time::Duration) -> io::Result<(Channels<T>, Channels<T>)> {
+    pub fn pair(
+        stream: StreamId,
+        timeout: time::Duration,
+    ) -> io::Result<(Channels<T>, Channels<T>)> {
         let (l_send, r_recv) = chan::unbounded::<ChannelEvent<T>>();
         let (r_send, l_recv) = chan::unbounded::<ChannelEvent<T>>();
 
-        let l = Channels::new(l_send, l_recv, timeout);
-        let r = Channels::new(r_send, r_recv, timeout);
+        let l = Channels::new(l_send, l_recv, stream, timeout);
+        let r = Channels::new(r_send, r_recv, stream, timeout);
 
         Ok((l, r))
     }
@@ -81,6 +126,7 @@ impl<T: AsRef<[u8]>> Channels<T> {
 pub struct ChannelReader<T = Vec<u8>> {
     buffer: io::Cursor<Vec<u8>>,
     receiver: chan::Receiver<ChannelEvent<T>>,
+    stream: StreamId,
     timeout: time::Duration,
 }
 
@@ -93,10 +139,15 @@ impl<T> Deref for ChannelReader<T> {
 }
 
 impl<T: AsRef<[u8]>> ChannelReader<T> {
-    pub fn new(receiver: chan::Receiver<ChannelEvent<T>>, timeout: time::Duration) -> Self {
+    pub fn new(
+        receiver: chan::Receiver<ChannelEvent<T>>,
+        stream: StreamId,
+        timeout: time::Duration,
+    ) -> Self {
         Self {
             buffer: io::Cursor::new(Vec::new()),
             receiver,
+            stream,
             timeout,
         }
     }
@@ -128,11 +179,17 @@ impl Read for ChannelReader<Vec<u8>> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let read = self.buffer.read(buf)?;
         if read > 0 {
+            println!("Read Data: {:?}", std::str::from_utf8(buf));
             return Ok(read);
         }
 
         match self.receiver.recv_timeout(self.timeout) {
             Ok(ChannelEvent::Data(data)) => {
+                println!(
+                    "Read Data stream={}: {:?}",
+                    self.stream,
+                    std::str::from_utf8(&data)
+                );
                 self.buffer = io::Cursor::new(data);
                 self.buffer.read(buf)
             }
@@ -155,7 +212,33 @@ impl Read for ChannelReader<Vec<u8>> {
 #[derive(Clone)]
 pub struct ChannelWriter<T = Vec<u8>> {
     sender: chan::Sender<ChannelEvent<T>>,
+    stream: StreamId,
     timeout: time::Duration,
+}
+
+pub struct ChannelFlushWriter<T = Vec<u8>> {
+    writer: ChannelWriter<T>,
+    handle: Handle,
+    remote: NodeId,
+}
+
+impl Write for ChannelFlushWriter<Vec<u8>> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        println!(
+            "Write Data stream={} node={}: {:?}",
+            self.writer.stream,
+            self.remote,
+            std::str::from_utf8(buf)
+        );
+        let n = buf.len();
+        self.writer.send(buf.to_vec())?;
+        self.flush()?;
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.handle.flush(self.remote, self.writer.stream)
+    }
 }
 
 impl<T: AsRef<[u8]>> ChannelWriter<T> {

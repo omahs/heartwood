@@ -7,6 +7,7 @@ use std::{fs, io};
 
 use crypto::{Signer, Unverified, Verified};
 use once_cell::sync::Lazy;
+use radicle_fetch as fetch;
 
 use crate::git;
 use crate::identity;
@@ -639,6 +640,56 @@ impl WriteRepository for Repository {
 
     fn raw(&self) -> &git2::Repository {
         &self.backend
+    }
+}
+
+impl fetch::Identities for Repository {
+    type VerifiedIdentity = Identity<Id>;
+    type VerifiedError = IdentityError;
+
+    fn verified(
+        &self,
+        head: fetch::gix::ObjectId,
+    ) -> Result<Self::VerifiedIdentity, Self::VerifiedError> {
+        use fetch::gix::oid;
+
+        Identity::load_at(oid::to_oid(head), self)?.verified(self.id)
+    }
+}
+
+impl fetch::sigrefs::Store for Repository {
+    type LoadError = refs::Error;
+    type UpdateError = Error;
+
+    fn load(
+        &self,
+        remote: &crypto::PublicKey,
+    ) -> Result<Option<fetch::sigrefs::Sigrefs>, Self::LoadError> {
+        use fetch::gix::oid;
+        let at = match self.reference_oid(remote, &refs::SIGREFS_BRANCH) {
+            Ok(at) => at,
+            Err(ext::Error::NotFound(_)) => return Ok(None),
+            Err(ext::Error::Git(e)) if e.code() == raw::ErrorCode::NotFound => return Ok(None),
+            Err(e) => return Err(e.into()),
+        };
+        let refs = SignedRefs::load_at(at, *remote, self)?
+            .refs
+            .into_iter()
+            .map(|(rname, tip)| (rname, oid::to_object_id(tip)))
+            .collect();
+
+        Ok(Some(fetch::sigrefs::Sigrefs {
+            at: oid::to_object_id(at),
+            refs,
+        }))
+    }
+
+    fn update<G>(&self, signer: &G) -> Result<(), Self::UpdateError>
+    where
+        G: Signer,
+    {
+        self.sign_refs(signer)?;
+        Ok(())
     }
 }
 
