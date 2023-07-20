@@ -21,6 +21,9 @@ jobs:
             docker_image: messense/rust-musl-cross:aarch64-musl
             docker_options: -v /home/runner/work/heartwood/heartwood:/home/rust/src -v /home/runner/.cargo/git:/root/.cargo/git -v /home/runner/.cargo/registry:/root/.cargo/registry
     steps:
+      - run: |
+          sudo apt update
+          sudo apt install --yes asciidoctor
       - name: Checkout source code
         uses: actions/checkout@v3
       - name: Configure build cache
@@ -58,6 +61,7 @@ jobs:
           - aarch64-apple-darwin
           - x86_64-apple-darwin
     steps:
+      - run: brew install asciidoctor
       - uses: actions/checkout@v3
       - name: Configure build cache
         uses: actions/cache@v3
